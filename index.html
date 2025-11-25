@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>성적 계산기 + 등수</title>
 <style>
-body { font-family: Arial; background:#f6f6f6; display:flex; justify-content:center; align-items:center; height:100vh; }
+body { font-family: Arial; background:#f6f6f6; display:flex; justify-content:center; align-items:flex-start; padding-top:50px; }
 .box { background:#fff; padding:20px; border-radius:10px; width:400px; box-shadow:0 0 10px rgba(0,0,0,0.1); }
 input { width:100%; padding:10px; margin:5px 0; }
 button { width:100%; padding:10px; margin-top:5px; background:#4caf50; color:white; border:none; border-radius:5px; cursor:pointer; }
 button:hover { background:#45a049; }
-#logoutBtn { background:#d9534f; }
+#error { color:red; margin-top:5px; }
 </style>
 </head>
 <body>
@@ -26,18 +26,24 @@ button:hover { background:#45a049; }
   <input id="korean" placeholder="국어 점수">
   <input id="math" placeholder="수학 점수">
   <input id="english" placeholder="영어 점수">
+  <input id="earth" placeholder="지구 점수">
+  <input id="biology" placeholder="생명 점수">
+  <input id="physics" placeholder="물리 점수">
+  <input id="chemistry" placeholder="화학 점수">
+  <input id="statistics" placeholder="확통 점수">
+  <input id="japanese" placeholder="일본어 점수">
   <button id="saveBtn">계산 및 저장</button>
+  <div id="error"></div>
   <div id="result" style="margin-top:10px;"></div>
-  <button id="logoutBtn">초기화</button>
 </div>
 
 <script>
 const loginDiv = document.getElementById("login");
 const mainDiv = document.getElementById("main");
 const resultDiv = document.getElementById("result");
+const errorDiv = document.getElementById("error");
 
 const startBtn = document.getElementById("startBtn");
-const logoutBtn = document.getElementById("logoutBtn");
 const saveBtn = document.getElementById("saveBtn");
 
 // 시작 버튼
@@ -50,33 +56,30 @@ startBtn.onclick = () => {
   displayPrevious();
 };
 
-// 초기화 버튼
-logoutBtn.onclick = () => {
-  mainDiv.style.display = "none";
-  loginDiv.style.display = "block";
-  document.getElementById("username").value = "";
-  document.getElementById("korean").value = "";
-  document.getElementById("math").value = "";
-  document.getElementById("english").value = "";
-  resultDiv.innerHTML = "";
-  localStorage.removeItem("username");
-};
-
 // 점수 계산 및 저장
 saveBtn.onclick = () => {
   const name = localStorage.getItem("username");
   if (!name) return alert("사용자 정보가 없습니다.");
 
-  const scores = {
-    korean: Number(document.getElementById("korean").value),
-    math: Number(document.getElementById("math").value),
-    english: Number(document.getElementById("english").value)
-  };
+  const fields = ["korean","math","english","earth","biology","physics","chemistry","statistics","japanese"];
+  const scores = {};
+  let valid = true;
 
-  if (Object.values(scores).some(isNaN)) return alert("모든 점수를 입력하세요.");
+  fields.forEach(f => {
+    const val = Number(document.getElementById(f).value);
+    if (isNaN(val) || val < 0 || val > 100) valid = false;
+    scores[f] = val;
+  });
+
+  if (!valid) {
+    errorDiv.textContent = "0~100 사이의 값으로 다시 입력하시오.";
+    return;
+  } else {
+    errorDiv.textContent = "";
+  }
 
   const total = Object.values(scores).reduce((a,b)=>a+b,0);
-  const avg = (total/3).toFixed(2);
+  const avg = (total/fields.length).toFixed(2);
 
   // LocalStorage에 저장
   let grades = JSON.parse(localStorage.getItem("grades")) || {};
@@ -92,27 +95,25 @@ function displayPrevious() {
   let grades = JSON.parse(localStorage.getItem("grades")) || {};
   if (!grades[name]) return;
 
-  // 각 과목 등수 계산
-  const sortedKorean = Object.entries(grades).sort((a,b)=>b[1].scores.korean - a[1].scores.korean);
-  const sortedMath = Object.entries(grades).sort((a,b)=>b[1].scores.math - a[1].scores.math);
-  const sortedEnglish = Object.entries(grades).sort((a,b)=>b[1].scores.english - a[1].scores.english);
-  const sortedTotal = Object.entries(grades).sort((a,b)=>b[1].total - a[1].total);
-
-  const getRank = (sortedArray) => sortedArray.findIndex(([n])=>n===name)+1;
-
-  const koreanRank = getRank(sortedKorean);
-  const mathRank = getRank(sortedMath);
-  const englishRank = getRank(sortedEnglish);
-  const totalRank = getRank(sortedTotal);
-
   const data = grades[name];
-  resultDiv.innerHTML = `
-    <b>국어:</b> ${data.scores.korean} (등수: ${koreanRank})<br>
-    <b>수학:</b> ${data.scores.math} (등수: ${mathRank})<br>
-    <b>영어:</b> ${data.scores.english} (등수: ${englishRank})<br>
-    <b>총점:</b> ${data.total} (등수: ${totalRank})<br>
-    <b>평균:</b> ${data.avg}
-  `;
+  const subjects = Object.keys(data.scores);
+
+  let resultHTML = "";
+  subjects.forEach(sub => {
+    // 등수 계산
+    const sorted = Object.entries(grades).sort((a,b)=>b[1].scores[sub]-a[1].scores[sub]);
+    const rank = sorted.findIndex(([n])=>n===name)+1;
+    resultHTML += `<b>${sub}:</b> ${data.scores[sub]} (등수: ${rank})<br>`;
+  });
+
+  // 총점 등수
+  const sortedTotal = Object.entries(grades).sort((a,b)=>b[1].total - a[1].total);
+  const totalRank = sortedTotal.findIndex(([n])=>n===name)+1;
+
+  resultHTML += `<b>총점:</b> ${data.total} (등수: ${totalRank})<br>`;
+  resultHTML += `<b>평균:</b> ${data.avg}`;
+
+  resultDiv.innerHTML = resultHTML;
 }
 </script>
 

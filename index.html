@@ -3,9 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>보안형 성적 순위 계산기</title>
-
-<!-- CSS -->
+<title>성적 계산기</title>
 <style>
 body { font-family: Arial; background:#f6f6f6; display:flex; justify-content:center; align-items:center; height:100vh; }
 .box { background:#fff; padding:20px; border-radius:10px; width:350px; box-shadow:0 0 10px rgba(0,0,0,0.1); }
@@ -14,90 +12,76 @@ button { width:100%; padding:10px; margin-top:5px; background:#4caf50; color:whi
 button:hover { background:#45a049; }
 #logoutBtn { background:#d9534f; }
 </style>
-
 </head>
 <body>
 
-<!-- 로그인 화면 -->
+<!-- 사용자 이름 입력 화면 -->
 <div id="login" class="box">
-  <h2>로그인 / 회원가입</h2>
-  <input id="email" placeholder="학번@school.com (이메일 형식)">
-  <input id="password" type="password" placeholder="비밀번호">
-  <button id="loginBtn">로그인</button>
-  <button id="registerBtn">회원가입</button>
+  <h2>사용자 정보 입력</h2>
+  <input id="username" placeholder="이름 입력">
+  <button id="loginBtn">시작</button>
 </div>
 
-<!-- 메인 화면 -->
+<!-- 성적 입력 화면 -->
 <div id="main" class="box" style="display:none;">
   <h2>성적 입력</h2>
   <input id="korean" placeholder="국어 점수">
   <input id="math" placeholder="수학 점수">
   <input id="english" placeholder="영어 점수">
-  <button id="saveBtn">성적 저장</button>
+  <button id="saveBtn">총점/평균 계산</button>
   <div id="result" style="margin-top:10px;"></div>
-  <button id="logoutBtn">로그아웃</button>
+  <button id="logoutBtn">초기화</button>
 </div>
 
-<!-- JS -->
-<script type="module">
-// ✅ Firebase SDK 로드
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } 
-  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-import { getFirestore, setDoc, doc, getDoc } 
-  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-
-// 🔧 Firebase 설정 (본인 값으로 변경!)
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
+<script>
 const loginDiv = document.getElementById("login");
 const mainDiv = document.getElementById("main");
 const resultDiv = document.getElementById("result");
 
-// 로그인
-document.getElementById("loginBtn").onclick = async () => {
-  const email = document.getElementById("email").value;
-  const pw = document.getElementById("password").value;
-  try {
-    await signInWithEmailAndPassword(auth, email, pw);
-    loginDiv.style.display = "none";
-    mainDiv.style.display = "block";
-  } catch {
-    alert("회원이 없거나 비밀번호가 틀립니다.");
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const saveBtn = document.getElementById("saveBtn");
+
+// 로그인(사용자 이름 입력)
+loginBtn.onclick = () => {
+  const name = document.getElementById("username").value.trim();
+  if (!name) return alert("이름을 입력하세요.");
+  localStorage.setItem("username", name);
+  loginDiv.style.display = "none";
+  mainDiv.style.display = "block";
+
+  // 저장된 점수 불러오기
+  const saved = JSON.parse(localStorage.getItem("grades"));
+  if (saved && saved[name]) {
+    const data = saved[name];
+    resultDiv.innerHTML = `
+      <b>국어:</b> ${data.scores.korean} 
+      <b>수학:</b> ${data.scores.math} 
+      <b>영어:</b> ${data.scores.english} <br>
+      <b>총점:</b> ${data.total} 
+      <b>평균:</b> ${data.avg}
+    `;
+  } else {
+    resultDiv.innerHTML = "";
   }
 };
 
-// 회원가입
-document.getElementById("registerBtn").onclick = async () => {
-  const email = document.getElementById("email").value;
-  const pw = document.getElementById("password").value;
-  try {
-    await createUserWithEmailAndPassword(auth, email, pw);
-    alert("회원가입 완료! 로그인하세요.");
-  } catch(e) {
-    alert("회원가입 실패: " + e.message);
-  }
-};
-
-// 로그아웃
-document.getElementById("logoutBtn").onclick = async () => {
-  await signOut(auth);
+// 초기화 (로그아웃)
+logoutBtn.onclick = () => {
   mainDiv.style.display = "none";
   loginDiv.style.display = "block";
+  document.getElementById("username").value = "";
+  document.getElementById("korean").value = "";
+  document.getElementById("math").value = "";
+  document.getElementById("english").value = "";
+  resultDiv.innerHTML = "";
+  localStorage.removeItem("username");
 };
 
-// 성적 저장
-document.getElementById("saveBtn").onclick = async () => {
-  const user = auth.currentUser;
-  if (!user) return alert("로그인 필요");
+// 점수 계산 및 저장
+saveBtn.onclick = () => {
+  const name = localStorage.getItem("username");
+  if (!name) return alert("사용자 정보가 없습니다.");
 
   const scores = {
     korean: Number(document.getElementById("korean").value),
@@ -105,30 +89,24 @@ document.getElementById("saveBtn").onclick = async () => {
     english: Number(document.getElementById("english").value)
   };
 
+  if (Object.values(scores).some(isNaN)) return alert("모든 점수를 입력하세요.");
+
   const total = Object.values(scores).reduce((a,b)=>a+b,0);
   const avg = (total/3).toFixed(2);
 
-  await setDoc(doc(db, "grades", user.email), { scores, total, avg });
+  // LocalStorage에 저장
+  let grades = JSON.parse(localStorage.getItem("grades")) || {};
+  grades[name] = { scores, total, avg };
+  localStorage.setItem("grades", JSON.stringify(grades));
 
-  resultDiv.innerHTML = `<b>총점:</b> ${total} <br><b>평균:</b> ${avg}`;
-  alert("저장 완료!");
+  resultDiv.innerHTML = `
+    <b>국어:</b> ${scores.korean} 
+    <b>수학:</b> ${scores.math} 
+    <b>영어:</b> ${scores.english} <br>
+    <b>총점:</b> ${total} 
+    <b>평균:</b> ${avg}
+  `;
 };
-
-// 로그인 상태 변화 감지
-onAuthStateChanged(auth, async user => {
-  if (user) {
-    loginDiv.style.display = "none";
-    mainDiv.style.display = "block";
-    const snap = await getDoc(doc(db, "grades", user.email));
-    if (snap.exists()) {
-      const data = snap.data();
-      resultDiv.innerHTML = `<b>총점:</b> ${data.total} <br><b>평균:</b> ${data.avg}`;
-    }
-  } else {
-    loginDiv.style.display = "block";
-    mainDiv.style.display = "none";
-  }
-});
 </script>
 
 </body>

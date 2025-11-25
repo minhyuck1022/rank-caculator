@@ -1,185 +1,135 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>성적 순위 계산기</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f6f6f6;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    .container {
-      background-color: #fff;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      width: 480px;
-      max-height: 95vh;
-      overflow-y: auto;
-    }
-    h1 {
-      text-align: center;
-    }
-    input {
-      width: 100%;
-      padding: 10px;
-      margin: 6px 0;
-      border-radius: 5px;
-      border: 1px solid #ccc;
-    }
-    .error {
-      color: red;
-      font-size: 13px;
-      margin-top: -4px;
-      margin-bottom: 8px;
-      display: none;
-    }
-    button {
-      width: 100%;
-      padding: 10px;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 16px;
-      margin-top: 10px;
-    }
-    button:hover {
-      background-color: #45a049;
-    }
-    .result {
-      margin-top: 20px;
-      font-size: 16px;
-      line-height: 1.6;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      text-align: center;
-    }
-    th {
-      background-color: #f0f0f0;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>보안형 성적 순위 계산기</title>
+
+<!-- CSS -->
+<style>
+body { font-family: Arial; background:#f6f6f6; display:flex; justify-content:center; align-items:center; height:100vh; }
+.box { background:#fff; padding:20px; border-radius:10px; width:350px; box-shadow:0 0 10px rgba(0,0,0,0.1); }
+input { width:100%; padding:10px; margin:5px 0; }
+button { width:100%; padding:10px; margin-top:5px; background:#4caf50; color:white; border:none; border-radius:5px; cursor:pointer; }
+button:hover { background:#45a049; }
+#logoutBtn { background:#d9534f; }
+</style>
+
 </head>
 <body>
-  <div class="container">
-    <h1>성적 계산기</h1>
-    <p>학번과 이름, 각 과목 점수를 입력하세요.</p>
 
-    <input type="text" id="studentIdName" placeholder="예: 22222 김춘자">
-    
-    <div id="inputs"></div>
+<!-- 로그인 화면 -->
+<div id="login" class="box">
+  <h2>로그인 / 회원가입</h2>
+  <input id="email" placeholder="학번@school.com (이메일 형식)">
+  <input id="password" type="password" placeholder="비밀번호">
+  <button id="loginBtn">로그인</button>
+  <button id="registerBtn">회원가입</button>
+</div>
 
-    <button onclick="calculateRank()">순위 확인</button>
+<!-- 메인 화면 -->
+<div id="main" class="box" style="display:none;">
+  <h2>성적 입력</h2>
+  <input id="korean" placeholder="국어 점수">
+  <input id="math" placeholder="수학 점수">
+  <input id="english" placeholder="영어 점수">
+  <button id="saveBtn">성적 저장</button>
+  <div id="result" style="margin-top:10px;"></div>
+  <button id="logoutBtn">로그아웃</button>
+</div>
 
-    <div class="result" id="result"></div>
-  </div>
+<!-- JS -->
+<script type="module">
+// ✅ Firebase SDK 로드
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } 
+  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+import { getFirestore, setDoc, doc, getDoc } 
+  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-  <script>
-    const subjects = [
-      { id: "korean", name: "국어" },
-      { id: "math", name: "수학" },
-      { id: "english", name: "영어" },
-      { id: "physics", name: "물리" },
-      { id: "chemistry", name: "화학" },
-      { id: "biology", name: "생명" },
-      { id: "earth", name: "지구" },
-      { id: "prob", name: "확통" },
-      { id: "japanese", name: "일본어" }
-    ];
+// 🔧 Firebase 설정 (본인 값으로 변경!)
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+};
 
-    let students = JSON.parse(localStorage.getItem("students")) || [];
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-    const inputContainer = document.getElementById("inputs");
-    subjects.forEach(sub => {
-      inputContainer.innerHTML += `
-        <div>
-          <input type="number" id="${sub.id}" placeholder="${sub.name} 점수">
-          <div class="error" id="${sub.id}-error">${sub.name} 점수는 0~100 사이로 입력하세요.</div>
-        </div>
-      `;
-    });
+const loginDiv = document.getElementById("login");
+const mainDiv = document.getElementById("main");
+const resultDiv = document.getElementById("result");
 
-    function calculateRank() {
-      const studentIdName = document.getElementById("studentIdName").value.trim();
-      if (!studentIdName) {
-        alert("학번과 이름을 입력하세요!");
-        return;
-      }
+// 로그인
+document.getElementById("loginBtn").onclick = async () => {
+  const email = document.getElementById("email").value;
+  const pw = document.getElementById("password").value;
+  try {
+    await signInWithEmailAndPassword(auth, email, pw);
+    loginDiv.style.display = "none";
+    mainDiv.style.display = "block";
+  } catch {
+    alert("회원이 없거나 비밀번호가 틀립니다.");
+  }
+};
 
-      let valid = true;
-      const scores = {};
-      subjects.forEach(sub => {
-        const value = Number(document.getElementById(sub.id).value);
-        const errorMsg = document.getElementById(sub.id + "-error");
-        if (isNaN(value) || value < 0 || value > 100) {
-          errorMsg.style.display = "block";
-          valid = false;
-        } else {
-          errorMsg.style.display = "none";
-          scores[sub.id] = value;
-        }
-      });
+// 회원가입
+document.getElementById("registerBtn").onclick = async () => {
+  const email = document.getElementById("email").value;
+  const pw = document.getElementById("password").value;
+  try {
+    await createUserWithEmailAndPassword(auth, email, pw);
+    alert("회원가입 완료! 로그인하세요.");
+  } catch(e) {
+    alert("회원가입 실패: " + e.message);
+  }
+};
 
-      if (!valid) return;
+// 로그아웃
+document.getElementById("logoutBtn").onclick = async () => {
+  await signOut(auth);
+  mainDiv.style.display = "none";
+  loginDiv.style.display = "block";
+};
 
-      const total = Object.values(scores).reduce((a, b) => a + b, 0);
-      const avg = (total / subjects.length).toFixed(2);
+// 성적 저장
+document.getElementById("saveBtn").onclick = async () => {
+  const user = auth.currentUser;
+  if (!user) return alert("로그인 필요");
 
-      // 기존 학생 정보 제거 후 새로 저장 (덮어쓰기)
-      students = students.filter(s => s.name !== studentIdName);
-      students.push({ name: studentIdName, scores, total, avg });
+  const scores = {
+    korean: Number(document.getElementById("korean").value),
+    math: Number(document.getElementById("math").value),
+    english: Number(document.getElementById("english").value)
+  };
 
-      localStorage.setItem("students", JSON.stringify(students));
-      showMyResult(studentIdName);
+  const total = Object.values(scores).reduce((a,b)=>a+b,0);
+  const avg = (total/3).toFixed(2);
+
+  await setDoc(doc(db, "grades", user.email), { scores, total, avg });
+
+  resultDiv.innerHTML = `<b>총점:</b> ${total} <br><b>평균:</b> ${avg}`;
+  alert("저장 완료!");
+};
+
+// 로그인 상태 변화 감지
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    loginDiv.style.display = "none";
+    mainDiv.style.display = "block";
+    const snap = await getDoc(doc(db, "grades", user.email));
+    if (snap.exists()) {
+      const data = snap.data();
+      resultDiv.innerHTML = `<b>총점:</b> ${data.total} <br><b>평균:</b> ${data.avg}`;
     }
+  } else {
+    loginDiv.style.display = "block";
+    mainDiv.style.display = "none";
+  }
+});
+</script>
 
-    function showMyResult(studentIdName) {
-      const students = JSON.parse(localStorage.getItem("students")) || [];
-
-      // 과목별 순위 계산
-      const subjectRanks = {};
-      subjects.forEach(sub => {
-        const sorted = [...students].sort((a, b) => b.scores[sub.id] - a.scores[sub.id]);
-        sorted.forEach((stu, idx) => {
-          if (!subjectRanks[stu.name]) subjectRanks[stu.name] = {};
-          subjectRanks[stu.name][sub.id] = idx + 1;
-        });
-      });
-
-      // 총점 기준 순위
-      students.sort((a, b) => b.total - a.total);
-
-      const me = students.find(s => s.name === studentIdName);
-      const myRank = students.findIndex(s => s.name === studentIdName) + 1;
-
-      if (!me) {
-        document.getElementById("result").innerHTML = `<p>해당 학생 정보를 찾을 수 없습니다.</p>`;
-        return;
-      }
-
-      document.getElementById("result").innerHTML = `
-        <b>${myRank}위 - ${me.name}</b><br>
-        총점: ${me.total}, 평균: ${me.avg}<br>
-        <table>
-          <tr><th>과목</th>${subjects.map(s => `<th>${s.name}</th>`).join("")}</tr>
-          <tr><td>점수</td>${subjects.map(s => `<td>${me.scores[s.id]}</td>`).join("")}</tr>
-          <tr><td>등수</td>${subjects.map(s => `<td>${subjectRanks[me.name][s.id]}위</td>`).join("")}</tr>
-        </table>
-      `;
-    }
-  </script>
 </body>
 </html>
